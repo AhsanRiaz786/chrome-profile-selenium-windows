@@ -75,17 +75,8 @@ def run(profile_path: str):
 
 
 if __name__ == "__main__":
-    # Windows Chrome profile path examples:
-    # Default profile: C:\Users\YourUsername\AppData\Local\Google\Chrome\User Data\Default
-    # Profile 1: C:\Users\YourUsername\AppData\Local\Google\Chrome\User Data\Profile 1
-    
-    # Get Windows username automatically
+    # Windows Chrome default profile path
     username = os.getenv('USERNAME')
-    
-    # Change 'Default' to your profile name (e.g., 'Profile 1', 'Profile 2', etc.)
     profile_path = rf"C:\Users\{username}\AppData\Local\Google\Chrome\User Data\Default"
-    
-    # Or specify manually:
-    # profile_path = r"C:\Users\YourUsername\AppData\Local\Google\Chrome\User Data\Profile 1"
     
     run(profile_path=profile_path)
