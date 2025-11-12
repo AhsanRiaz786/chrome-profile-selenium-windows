@@ -1,4 +1,5 @@
-import os, certifi
+import os, certifi, subprocess, time
+
 os.environ['SSL_CERT_FILE'] = certifi.where()
 os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
 
@@ -12,71 +13,65 @@ except ImportError:
     from webdriver_manager.chrome import ChromeDriverManager
     USE_UC = False
 
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-import os
-import shutil
-import tempfile
-import subprocess
-import time
 
+def run(profile_dir: str, profile_name: str, target_url: str):
+    # Kill any existing Chrome instances using the profile
+    subprocess.run(['taskkill', '/F', '/IM', 'chrome.exe', '/T'],
+                   stderr=subprocess.DEVNULL,
+                   stdout=subprocess.DEVNULL,
+                   check=False)
+    time.sleep(1.5)
 
-def run(profile_path: str):
-    # Kill Chrome processes on Windows
-    subprocess.run(['taskkill', '/F', '/IM', 'chrome.exe', '/T'], 
-                  stderr=subprocess.DEVNULL, 
-                  stdout=subprocess.DEVNULL, 
-                  check=False)
-    time.sleep(2)
-    
-    original_path = os.path.dirname(profile_path)
-    profile_name = os.path.basename(profile_path)
-    
-    temp_dir = tempfile.mkdtemp(prefix="ChromeTemp_")
-    temp_profile = os.path.join(temp_dir, "UserData")
-    source_profile = os.path.join(original_path, profile_name)
-    
-    os.makedirs(temp_profile, exist_ok=True)
-    dest_profile = os.path.join(temp_profile, profile_name)
-    shutil.copytree(source_profile, dest_profile, ignore=shutil.ignore_patterns('Service Worker', 'Code Cache', 'GPUCache'))
-    
-    for file_name in ["Local State", "Preferences", "Secure Preferences"]:
-        source_file = os.path.join(original_path, file_name)
-        if os.path.exists(source_file):
-            shutil.copy2(source_file, temp_profile)
-    
+    # Setup Chrome options
     if USE_UC:
         options = uc.ChromeOptions()
-        options.add_argument(f"--user-data-dir={temp_profile}")
-        options.add_argument(f"--profile-directory={profile_name}")
-        options.add_argument("--headless")
-        # options.add_argument("--start-maximized")
-        # options.add_experimental_option("prefs", {"credentials_enable_service": True, "profile.password_manager_enabled": True})
-        driver = uc.Chrome(options=options)
     else:
+        from selenium.webdriver.chrome.options import Options
         options = Options()
-        options.add_argument(f"--user-data-dir={temp_profile}")
-        options.add_argument(f"--profile-directory={profile_name}")
-        # options.add_argument("--start-maximized")
-        # options.add_experimental_option("prefs", {"credentials_enable_service": True, "profile.password_manager_enabled": True})
+
+    options.add_argument(f"--user-data-dir={profile_dir}")
+    options.add_argument(f"--profile-directory={profile_name}")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--start-maximized")
+
+    # Apply experimental options only if using standard Chrome
+    if not USE_UC:
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
+
+    # Launch browser
+    if USE_UC:
+        driver = uc.Chrome(options=options, use_subprocess=True)
+    else:
+        from selenium.webdriver.chrome.service import Service
+        from webdriver_manager.chrome import ChromeDriverManager
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
-    # driver.implicitly_wait(10)
-    
-    driver.get("https://windscribe.com/")
-    time.sleep(5)
-    driver.save_screenshot("screenshot.png")
-    # WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+
+    # Force navigation even if homepage/session restore appears
     time.sleep(2)
-    
-    input()
+    driver.get(target_url)
+    time.sleep(3)
+
+    # Double-check if the right page loaded
+    if not driver.current_url.startswith(target_url):
+        driver.get(target_url)
+
+    # Screenshot to confirm
+    time.sleep(4)
+    driver.save_screenshot("screenshot.png")
+    print(f"✅ Opened successfully: {driver.current_url}")
+
+    input("Press Enter to close...")
     driver.quit()
 
 
-if __name__ == "__main__":
-    # Windows Chrome default profile path
+if _name_ == "_main_":
     username = os.getenv('USERNAME')
-    profile_path = rf"C:\Users\{username}\AppData\Local\Google\Chrome\User Data\Default"
-    
-    run(profile_path=profile_path)
+    profile_dir = rf"C:\Users\{username}\AppData\Local\Google\Chrome\User Data"
+    profile_name = "Default"   # or "Profile 1", "Profile 2"
+    target_url = "https://windscribe.com/"
+
+    run(profile_dir, profile_name, target_url)
